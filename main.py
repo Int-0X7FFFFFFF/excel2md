@@ -137,6 +137,14 @@ def sheets_output_complete(excel_dir: Path, sheet_names: list[str]) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows 控制台默认编码（cp1252/cp936）无法编码 ✔/✘/⚠ 等字符，打印会抛
+    # UnicodeEncodeError；强制 stdout/stderr 用 UTF-8（errors=replace 兜底）。
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     parser = argparse.ArgumentParser(
         description="批量将 input 文件夹下的 Excel 转换为 Markdown 输出到 output",
     )
