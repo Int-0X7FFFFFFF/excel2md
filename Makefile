@@ -3,7 +3,8 @@
 # Linux/本机：直接 make build；Windows 走 CI（.github/workflows/build-windows.yml）
 
 PYTHON ?= .venv/bin/python
-EXE    := build/excel2md.dist/excel2md.exe
+# dist 目录名取自主脚本模块名（main.py → main.dist）
+EXE    := build/main.dist/excel2md.exe
 
 .PHONY: all sync build run smoke clean help
 
