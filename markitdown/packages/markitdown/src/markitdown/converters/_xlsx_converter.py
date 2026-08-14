@@ -26,14 +26,12 @@ from .._stream_info import StreamInfo
 # Save reporting of any exceptions for later
 _xlsx_dependency_exc_info = None
 try:
-    import pandas as pd  # noqa: F401  (kept for the xlsx extra dependency check)
     import openpyxl  # noqa: F401
 except ImportError:
     _xlsx_dependency_exc_info = sys.exc_info()
 
 _xls_dependency_exc_info = None
 try:
-    import pandas as pd  # noqa: F811
     import xlrd  # noqa: F401
 except ImportError:
     _xls_dependency_exc_info = sys.exc_info()
@@ -369,8 +367,7 @@ class XlsxConverter(DocumentConverter):
 
         Reads Cell objects once (values + borders) so region detection can use
         the border signal, and embedded images once (bytes + anchor rows).
-        ``data_only=True``: formula cells yield their cached value, matching
-        pandas' read behavior.
+        ``data_only=True``: formula cells yield their cached value.
         """
         # Check the dependencies
         if _xlsx_dependency_exc_info is not None:

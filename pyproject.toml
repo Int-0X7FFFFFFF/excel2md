@@ -3,7 +3,9 @@ name = "excel2md"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "markitdown[xlsx,xls]",
+    "markitdown",
+    "openpyxl",
+    "xlrd",
 ]
 
 [tool.uv.workspace]

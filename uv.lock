@@ -482,7 +482,9 @@ name = "excel2md"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "markitdown", extra = ["xls", "xlsx"] },
+    { name = "markitdown" },
+    { name = "openpyxl" },
+    { name = "xlrd" },
 ]
 
 [package.dev-dependencies]
@@ -492,7 +494,11 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "markitdown", extras = ["xlsx", "xls"], editable = "markitdown/packages/markitdown" }]
+requires-dist = [
+    { name = "markitdown", editable = "markitdown/packages/markitdown" },
+    { name = "openpyxl" },
+    { name = "xlrd" },
+]
 
 [package.metadata.requires-dev]
 dev = [

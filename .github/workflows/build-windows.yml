@@ -12,6 +12,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    # GitHub-hosted 单 job 上限 6h；设 3h 安全阀，卡死时提前失败而不是烧满额度
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 

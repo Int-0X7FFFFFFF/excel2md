@@ -14,41 +14,37 @@
       用 --nofollow-import-to 排除。
 """
 
+import os
 import subprocess
 import sys
+
+# 并行编译 job 数：取 CPU 核数（上限 8）。Nuitka 默认可能单核，
+# 显式设置能大幅加速最耗时的 C 编译阶段；内存紧张可调低上限。
+JOBS = max(1, min(os.cpu_count() or 2, 8))
 
 FLAGS = [
     sys.executable,
     "-m",
     "nuitka",
     "--standalone",
+    f"--jobs={JOBS}",
     "--assume-yes-for-downloads",  # 允许 Nuitka 在 Windows 下载 MinGW64/MSVC
     "--output-dir=build",
     "--output-filename=excel2md.exe",
-    "--enable-plugin=numpy",
-    # magika: 模型数据文件（config/*.json + models/standard_v3_3/*.onnx）
-    "--include-package=magika",
-    "--include-package-data=magika",
-    # magika 依赖 onnxruntime（含原生 DLL）
-    "--include-package=onnxruntime",
-    "--include-package-data=onnxruntime",
-    "--nofollow-import-to=onnxruntime.transformers",
-    "--nofollow-import-to=onnxruntime.training",
-    # numpy + pandas（编译扩展 + 共享库）
-    "--include-package=numpy",
-    "--include-package-data=numpy",
-    "--include-package=pandas",
-    "--include-package-data=pandas",
-    # Excel 读取
+    # markitdown/__init__ 已惰性化 _markitdown，magika/onnxruntime/requests 在
+    # 运行时不再被导入；这里显式不跟随，避免 Nuitka 沿惰性路径仍去编译它们
+    # （onnxruntime/magika 是最大的编译单元）。
+    "--nofollow-import-to=magika",
+    "--nofollow-import-to=onnxruntime",
+    "--nofollow-import-to=requests",
+    # numpy 仅被 openpyxl.compat.numbers 以 try 守卫方式可选导入，非必需；
+    # pandas 已移除，故 numpy 也不需要，排除后可进一步缩小构建/产物。
+    "--nofollow-import-to=numpy",
+    # Excel 读取（pandas 已不再被转换器使用，故不包含 numpy/pandas）
     "--include-package=openpyxl",
     "--include-package-data=openpyxl",
     "--include-package=xlrd",
-    # requests + CA 证书
-    "--include-package=requests",
-    "--include-package-data=requests",
-    "--include-package=certifi",
-    "--include-package-data=certifi",
-    # markitdown 依赖
+    # markitdown xlsx 转换链（HtmlConverter → markdownify/bs4）
     "--include-package=charset_normalizer",
     "--include-package-data=charset_normalizer",
     "--include-package=markdownify",
