@@ -1,0 +1,18 @@
+[project]
+name = "excel2md"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "markitdown[xlsx,xls]",
+]
+
+[tool.uv.workspace]
+members = [
+    "markitdown/packages/markitdown",
+]
+
+[tool.uv.sources]
+markitdown = { workspace = true }
+
+[dependency-groups]
+dev = ["nuitka", "pillow"]  # pillow 仅用于本地构造含图片的测试 fixture
