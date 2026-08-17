@@ -21,7 +21,7 @@ from typing import Any, NamedTuple
 
 # Bump whenever the classification heuristic or renderer changes: the excel2md
 # batch tool treats a mismatched version as "reconvert everything".
-CLASSIFIER_VERSION = 3
+CLASSIFIER_VERSION = 4
 
 # --- Whole-sheet classification thresholds ------------------------------------
 DOC_MAX_COLS = 2                 # ≤2 columns is a strong document signal
@@ -86,12 +86,20 @@ def sanitize_filename(name: str) -> str:
 def _cell_text(value: Any) -> str:
     """Normalize a raw cell value to stripped text ('' means empty).
 
-    Treats a pandas-style ``"nan"`` string as empty so it never leaks into the
-    rendered output.
+    Python floats (openpyxl formula-cached values like ``8.440000000000001``)
+    are formatted with ``%.15g`` to match Excel General's ~15 significant
+    digits, so the floating-point noise never leaks into the markdown. bool is
+    a subclass of int (not float); the explicit guard keeps ``True``/``False``
+    as text. A pandas-style ``"nan"`` string still renders empty.
     """
     if value is None:
         return ""
-    text = str(value).strip()
+    if isinstance(value, bool):
+        text = str(value).strip()
+    elif isinstance(value, float):
+        text = f"{value:.15g}"
+    else:
+        text = str(value).strip()
     if text.lower() == "nan":
         return ""
     return text

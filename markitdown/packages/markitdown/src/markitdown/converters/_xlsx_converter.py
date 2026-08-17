@@ -358,18 +358,7 @@ class XlsxConverter(DocumentConverter):
         """
         return self._convert_sheets_data(file_stream, kwargs)
 
-    def _convert_sheets_data(
-        self,
-        file_stream: BinaryIO,
-        kwargs: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]:
-        """One-pass parse → ``{sheetname: {"markdown", "images"}}``.
-
-        Reads Cell objects once (values + borders) so region detection can use
-        the border signal, and embedded images once (bytes + anchor rows).
-        ``data_only=True``: formula cells yield their cached value.
-        """
-        # Check the dependencies
+    def _require_deps(self) -> None:
         if _xlsx_dependency_exc_info is not None:
             raise MissingDependencyException(
                 MISSING_DEPENDENCY_MESSAGE.format(
@@ -383,27 +372,71 @@ class XlsxConverter(DocumentConverter):
                 _xlsx_dependency_exc_info[2]
             )
 
+    def convert_sheet_with_assets(
+        self,
+        file_stream: BinaryIO,
+        sheet_name: str,
+        **kwargs: Any,  # Options to pass to the converter
+    ) -> dict[str, Any]:
+        """Convert a single named sheet → ``{"markdown": str, "images": {relpath: bytes}}``.
+
+        Used by the batch tool's multiprocessing workers: each ``(file, sheet)``
+        pair is an independent task, so a worker loads the workbook and converts
+        only its one sheet. ``images`` maps the markdown-referenced relative
+        paths (e.g. ``assets/综述/image_1.png``) to raw image bytes.
+        """
+        self._require_deps()
         file_stream.seek(0)
         wb = openpyxl.load_workbook(file_stream, data_only=True)
-        sheets: dict[str, dict[str, Any]] = {}
-        for s in wb.sheetnames:
-            ws = wb[s]
-            cells: list[list[Any]] = []
-            borders: list[list[bool]] = []
-            for row in ws.iter_rows():  # Cell objects → one pass for value + border
-                cells.append([cell.value for cell in row])
-                borders.append([_has_border(cell.border) for cell in row])
-            images, images_by_row = _extract_images(ws, s)
-            body = _sheet_to_markdown(
-                s,
-                cells,
-                len(ws.merged_cells.ranges),
-                kwargs,
-                border_flags=borders,
-                images_by_row=images_by_row,
-            )
-            sheets[s] = {"markdown": body, "images": images}
-        return sheets
+        try:
+            if sheet_name not in wb.sheetnames:
+                raise ValueError(f"sheet not found: {sheet_name!r}")
+            return self._sheet_data(wb, sheet_name, kwargs)
+        finally:
+            wb.close()
+
+    def _sheet_data(
+        self,
+        wb: Any,
+        sheet_name: str,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Convert ONE sheet of an already-loaded workbook → ``{"markdown", "images"}``."""
+        ws = wb[sheet_name]
+        cells: list[list[Any]] = []
+        borders: list[list[bool]] = []
+        for row in ws.iter_rows():  # Cell objects → one pass for value + border
+            cells.append([cell.value for cell in row])
+            borders.append([_has_border(cell.border) for cell in row])
+        images, images_by_row = _extract_images(ws, sheet_name)
+        body = _sheet_to_markdown(
+            sheet_name,
+            cells,
+            len(ws.merged_cells.ranges),
+            kwargs,
+            border_flags=borders,
+            images_by_row=images_by_row,
+        )
+        return {"markdown": body, "images": images}
+
+    def _convert_sheets_data(
+        self,
+        file_stream: BinaryIO,
+        kwargs: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        """One-pass parse → ``{sheetname: {"markdown", "images"}}``.
+
+        Reads Cell objects once (values + borders) so region detection can use
+        the border signal, and embedded images once (bytes + anchor rows).
+        ``data_only=True``: formula cells yield their cached value.
+        """
+        self._require_deps()
+        file_stream.seek(0)
+        wb = openpyxl.load_workbook(file_stream, data_only=True)
+        try:
+            return {s: self._sheet_data(wb, s, kwargs) for s in wb.sheetnames}
+        finally:
+            wb.close()
 
 
 class XlsConverter(DocumentConverter):
@@ -439,17 +472,7 @@ class XlsConverter(DocumentConverter):
             markdown=_join_sheets(self.convert_sheets(file_stream, **kwargs))
         )
 
-    def convert_sheets(
-        self,
-        file_stream: BinaryIO,
-        **kwargs: Any,  # Options to pass to the converter
-    ) -> dict[str, str]:
-        """Convert each sheet to a Markdown body; returns ``{sheetname: markdown}``.
-
-        ``.xls`` has no border info in xlrd 2.x, so region detection falls back
-        to content-run / dense-block signals only.
-        """
-        # Load the dependencies
+    def _require_deps(self) -> None:
         if _xls_dependency_exc_info is not None:
             raise MissingDependencyException(
                 MISSING_DEPENDENCY_MESSAGE.format(
@@ -463,17 +486,45 @@ class XlsConverter(DocumentConverter):
                 _xls_dependency_exc_info[2]
             )
 
+    def convert_sheet_with_assets(
+        self,
+        file_stream: BinaryIO,
+        sheet_name: str,
+        **kwargs: Any,  # Options to pass to the converter
+    ) -> dict[str, Any]:
+        """Convert a single named sheet → ``{"markdown": str, "images": {}}``.
+
+        ``.xls`` has no embedded-image extraction in xlrd 2.x, so ``images`` is
+        always empty (same contract as :meth:`convert_sheets_with_assets`).
+        """
+        self._require_deps()
         file_stream.seek(0)
-        data = file_stream.read()
-        book = xlrd.open_workbook(file_contents=data)
-        sheets: dict[str, str] = {}
-        for s in book.sheet_names():
-            sh = book.sheet_by_name(s)
-            cells = [sh.row_values(r) for r in range(sh.nrows)]
-            # Merged ranges need xlrd formatting_info=True (requires a real file
-            # path); skipped for v1 → merged_count=0.
-            sheets[s] = _sheet_to_markdown(s, cells, 0, kwargs)
-        return sheets
+        book = xlrd.open_workbook(file_contents=file_stream.read())
+        if sheet_name not in book.sheet_names():
+            raise ValueError(f"sheet not found: {sheet_name!r}")
+        return {"markdown": self._sheet_data(book, sheet_name, kwargs), "images": {}}
+
+    def _sheet_data(self, book: Any, sheet_name: str, kwargs: dict[str, Any]) -> str:
+        sh = book.sheet_by_name(sheet_name)
+        cells = [sh.row_values(r) for r in range(sh.nrows)]
+        # Merged ranges need xlrd formatting_info=True (requires a real file
+        # path); skipped for v1 → merged_count=0.
+        return _sheet_to_markdown(sheet_name, cells, 0, kwargs)
+
+    def convert_sheets(
+        self,
+        file_stream: BinaryIO,
+        **kwargs: Any,  # Options to pass to the converter
+    ) -> dict[str, str]:
+        """Convert each sheet to a Markdown body; returns ``{sheetname: markdown}``.
+
+        ``.xls`` has no border info in xlrd 2.x, so region detection falls back
+        to content-run / dense-block signals only.
+        """
+        self._require_deps()
+        file_stream.seek(0)
+        book = xlrd.open_workbook(file_contents=file_stream.read())
+        return {s: self._sheet_data(book, s, kwargs) for s in book.sheet_names()}
 
     def convert_sheets_with_assets(
         self,
