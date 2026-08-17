@@ -3,8 +3,8 @@
 # Linux/本机：直接 make build；Windows 走 CI（.github/workflows/build-windows.yml）
 
 PYTHON ?= .venv/bin/python
-# dist 目录名取自主脚本模块名（main.py → main.dist）
-EXE    := build/main.dist/excel2md.exe
+# onefile 产物为单文件，直接落在 build/ 下（区别于 standalone 的 build/main.dist/）
+EXE    := build/excel2md.exe
 
 .PHONY: all sync build run smoke clean help
 
@@ -13,7 +13,7 @@ all: build           ## 同步依赖并构建
 sync:                ## 按 uv.lock 同步依赖
 	uv sync
 
-build: sync          ## Nuitka standalone 构建（产物 build/excel2md.dist/）
+build: sync          ## Nuitka onefile 构建（产物 build/excel2md.exe）
 	$(PYTHON) build.py
 
 run:                 ## 用源码运行转换工具（input/ → output/）

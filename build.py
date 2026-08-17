@@ -1,14 +1,17 @@
-"""excel2md Nuitka standalone 打包脚本（在 Windows 上运行）。
+"""excel2md Nuitka onefile 打包脚本（在 Windows 上运行）。
 
 用法:
     python build.py
 
-产物: build/excel2md.dist/excel2md.exe（standalone，自带依赖与数据文件）。
+产物: 单个可执行文件 excel2md.exe（--onefile，运行时才解包到临时目录，
+       ‌自带依赖与数据文件；替代旧的 standalone 目录产物 build/main.dist/）。
 
 注意:
     - Nuitka 不支持交叉编译，必须在目标平台（Windows）上执行。
     - 需在 Windows 上建一个 Python 3.13 venv 并可编辑安装本 workspace
       （uv sync 或 pip install -e markitdown/packages/markitdown[xlsx]）。
+    - onefile + multiprocessing(spawn)：Windows 下每个 worker 子进程会重新解包
+      一次 onefile（启动略慢但可用）；main.py 已调用 freeze_support()。
     - magika 通过 __file__ 相对路径加载模型文件，必须 --include-package-data。
     - onnxruntime 有原生 DLL；其 transformers/training 子包依赖 torch 等重依赖，
       用 --nofollow-import-to 排除。
@@ -26,7 +29,7 @@ FLAGS = [
     sys.executable,
     "-m",
     "nuitka",
-    "--standalone",
+    "--onefile",
     f"--jobs={JOBS}",
     "--assume-yes-for-downloads",  # 允许 Nuitka 在 Windows 下载 MinGW64/MSVC
     "--output-dir=build",
